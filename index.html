@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hammer &amp; Hoard showcase</title>
+<style>
+:root { --bg: #17120e; --panel: #221a14; --line: #3a2d22; --text: #efe4d4; --dim: #a8977f; --gold: #e8b04a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, sans-serif; }
+main { max-width: 1500px; margin: 0 auto; padding: 24px 16px 40px; }
+h1 { color: var(--gold); font-size: 22px; margin: 0 0 4px; }
+.sub { color: var(--dim); margin: 0 0 24px; font-size: 14px; }
+h2 { color: var(--gold); font-size: 16px; margin: 28px 0 10px; letter-spacing: .03em; text-transform: uppercase; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.card img, .card video { display: block; width: 100%; aspect-ratio: 16/9; background: #000; object-fit: cover; }
+.card video { object-fit: contain; }
+.card img { cursor: zoom-in; }
+.cap { padding: 8px 11px 10px; font-size: 14px; }
+.cap b { color: var(--gold); font-weight: 600; margin-right: 6px; }
+.cap span { color: var(--dim); }
+footer { margin-top: 36px; color: var(--dim); font-size: 13px; }
+footer a { color: var(--dim); }
+.dl { color: var(--gold); font-size: 13px; }
+#lb { position: fixed; inset: 0; background: rgba(0,0,0,.93); display: none; z-index: 10; align-items: center; justify-content: center; flex-direction: column; gap: 10px; cursor: zoom-out; }
+#lb.on { display: flex; }
+#lb img { max-width: 96vw; max-height: 88vh; }
+#lb p { color: #ddd; margin: 0; font-size: 14px; text-align: center; padding: 0 16px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hammer &amp; Hoard showcase</h1>
+  <p class="sub">Store screenshots and videos: 1920×1080, 60 fps, with game sound. Click a still to see it full size (← → to step, Esc or click to close).</p>
+  <h2>Video</h2><div class="grid" id="clips"></div>
+  <h2>Screenshots</h2><div class="grid" id="stills"></div>
+  <footer>Hammer &amp; Hoard. Videos play here in high quality; use "Download the original" for the full-size files.</footer>
+</main>
+<div id="lb" role="dialog" aria-modal="true"><img alt=""><p></p></div>
+<script>
+const DATA = {"clips": [{"p": "media/trailer_v5.mp4", "c": "Trailer: one job start to finish, from the mine to the dragon, then growth", "d": 66.837, "o": "https://github.com/swheettaos/hnh-testing/releases/download/showcase-media/trailer_v5.mp4", "s": "163 MB"}, {"p": "media/gameplay_v4.mp4", "c": "Gameplay: coal, sweeping, the altar, the tome, buying skills, the gems flying to the board, the dragon's shop, and reading the tally", "d": 96.618, "o": "https://github.com/swheettaos/hnh-testing/releases/download/showcase-media/gameplay_v4.mp4", "s": "169 MB"}, {"p": "media/1_swoop.mp4", "c": "Fly-through of the whole workshop, ending on the workbench", "d": 24.0}, {"p": "media/2_dragon_face.mp4", "c": "The dragon's face rises out of the dark behind the altar", "d": 6.833333}, {"p": "media/3_heating.mp4", "c": "Taking ore from the cart and heating it to Perfect in the forge (HUD on)", "d": 7.666667}, {"p": "media/4_gem_cutting.mp4", "c": "Cutting a rough gem on the spinning lap (HUD on)", "d": 7.683333}, {"p": "media/5_frenzy_hud.mp4", "c": "True strikes into a frenzy, finishing a Plain Band (HUD on)", "d": 7.066667}], "stills": [{"p": "media/01_workshop.png", "c": "The whole workshop: anvil, forge, altar and the dragon's wares"}, {"p": "media/02_chest_tome_tally.png", "c": "The corner: chest of gold, the tome, the Smith's Tally and the gem bench"}, {"p": "media/03_forge.png", "c": "The forge up close"}, {"p": "media/04_tally.png", "c": "The Smith's Tally board with all your stats"}, {"p": "media/05_gem_bench.png", "c": "The gem bench with its lap, loupe and gem tray"}, {"p": "media/06_hud_forge.png", "c": "Heating ore in the forge, aiming for the green (HUD on)"}, {"p": "media/07_hud_gem_bench.png", "c": "Cutting a gem on the lap (HUD on)"}, {"p": "media/08_frenzy.png", "c": "Mid-frenzy at the anvil (HUD on)"}, {"p": "media/09_skill_map.png", "c": "The skill map: Smithing, Metallurgy, Artisan, Charmcraft"}, {"p": "media/10_dragon_wares.png", "c": "The dragon's shop: \"Choose, little thief.\""}, {"p": "media/11_workbench.png", "c": "The workbench: cosmetic looks for your tools"}]};
+const name = p => p.split("/").pop().replace(/\.(png|mp4)$/, "").replace(/^\d+_/, "").replace(/_/g, " ");
+const fmt = s => `${s.toFixed(1)} s`;
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const clips = document.getElementById("clips"), stills = document.getElementById("stills");
+for (const c of DATA.clips) {
+  const d = document.createElement("div"); d.className = "card";
+  d.innerHTML = `<video controls preload="metadata" src="${c.p}" poster="${c.p.replace(".mp4", ".jpg")}"></video>
+    <div class="cap"><b>${esc(name(c.p))}</b><span>${fmt(c.d)} · ${esc(c.c)}</span>${c.o ? `<br><a class="dl" href="${c.o}">Download the original (${c.s})</a>` : ""}</div>`;
+  clips.appendChild(d);
+}
+DATA.stills.forEach((s, i) => {
+  const d = document.createElement("div"); d.className = "card";
+  d.innerHTML = `<img loading="lazy" src="${s.p}" alt="${esc(s.c)}"><div class="cap"><b>${i + 1}. ${esc(name(s.p))}</b><span>${esc(s.c)}</span></div>`;
+  d.querySelector("img").onclick = () => open(i);
+  stills.appendChild(d);
+});
+const lb = document.getElementById("lb"), img = lb.querySelector("img"), cap = lb.querySelector("p");
+let cur = 0;
+function open(i) { cur = (i + DATA.stills.length) % DATA.stills.length; const s = DATA.stills[cur]; img.src = s.p; cap.textContent = `${cur + 1}/${DATA.stills.length} · ${name(s.p)}: ${s.c}`; lb.classList.add("on"); }
+lb.onclick = () => lb.classList.remove("on");
+document.addEventListener("keydown", e => {
+  if (!lb.classList.contains("on")) return;
+  if (e.key === "Escape") lb.classList.remove("on");
+  if (e.key === "ArrowRight") open(cur + 1);
+  if (e.key === "ArrowLeft") open(cur - 1);
+});
+</script>
+</body>
+</html>
