@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+		<title>Hammer & Hoard</title>
+		<style>
+/* Loading screen for the web build: same look as the in-game intro (embers rising out
+   of the dark, a forge glow at the bottom, the title in gold). It stays up through the
+   download AND the game's own warm-up, until the game calls window.hoardLoaded(). The
+   embers and the bar shimmer are CSS transform/opacity animations, so they keep moving
+   even while the game is busy and the page can't run any script. */
+@font-face { font-family: "Metamorphous"; src: url("Metamorphous-Regular.ttf"); font-display: swap; }
+@font-face { font-family: "Almendra"; src: url("Almendra-Regular.ttf"); font-display: swap; }
+html, body, #canvas { margin: 0; padding: 0; border: 0; }
+body { color: #f0e1c4; background-color: #050302; overflow: hidden; touch-action: none; }
+#canvas { display: block; }
+#canvas:focus { outline: none; }
+#status {
+	position: absolute; inset: 0; z-index: 2;
+	display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1.4rem;
+	background: radial-gradient(ellipse 80% 55% at 50% 100%, rgba(140, 51, 13, 0.55), rgba(140, 51, 13, 0) 100%), #050302;
+	font-family: "Almendra", "Palatino Linotype", Georgia, serif;
+	text-align: center; padding: 0 16px; box-sizing: border-box;
+	transition: opacity 0.6s ease;
+}
+#status.gone { opacity: 0; pointer-events: none; }
+#status-title {
+	margin: 0; font-family: "Metamorphous", "Palatino Linotype", Georgia, serif; font-weight: normal;
+	font-size: clamp(2rem, 7vw, 4.5rem); letter-spacing: 0.06em; color: #e9b24a;
+	text-shadow: 0 0 2px #5a1f04, 0 0 24px rgba(255, 115, 25, 0.35);
+}
+#status-text { min-height: 1.5em; font-size: clamp(1rem, 2.6vw, 1.35rem); color: #d8c7a6; }
+#status-bar {
+	position: relative; width: min(420px, 80vw); height: 10px; overflow: hidden;
+	border: 1px solid #8a6a30; border-radius: 6px; background: rgba(0, 0, 0, 0.5);
+}
+#status-fill {
+	position: absolute; inset: 0; transform-origin: left center; transform: scaleX(0);
+	background: linear-gradient(90deg, #8a4a14, #e9b24a); transition: transform 0.3s ease;
+}
+#status-bar.busy #status-fill { transform: scaleX(1); }
+#status-shimmer {
+	position: absolute; top: 0; bottom: 0; left: 0; width: 35%; opacity: 0;
+	background: linear-gradient(90deg, rgba(255, 230, 160, 0), rgba(255, 230, 160, 0.65), rgba(255, 230, 160, 0));
+}
+#status-bar.busy #status-shimmer { opacity: 1; animation: shimmer 1.6s linear infinite; }
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+#status-hint { font-size: 0.95rem; color: #8f7d60; min-height: 1.3em; }
+.ember {
+	position: absolute; bottom: -10px; width: 4px; height: 4px; border-radius: 50%;
+	background: #ffbf5a; box-shadow: 0 0 6px 2px rgba(255, 120, 30, 0.7);
+	animation: rise linear infinite; opacity: 0;
+}
+@keyframes rise {
+	0% { transform: translate(0, 0); opacity: 0; }
+	10% { opacity: 1; }
+	100% { transform: translate(var(--drift), -85vh); opacity: 0; }
+}
+#status-version { position: absolute; right: 12px; bottom: 8px; font-size: 0.8rem; color: #8f7d60; }
+.crash-log {
+	position: absolute; inset: 0; z-index: 5; margin: 0; padding: 24px; overflow: auto;
+	background: #1d140d; color: #ffe9c2; font: 18px/1.4 monospace; white-space: pre-wrap;
+}
+#status-notice {
+	display: none; max-width: 36rem; padding: 1rem; border-radius: 0.5rem;
+	background-color: #5b3943; border: 1px solid #9b3943; color: #e0e0e0; line-height: 1.3;
+}
+@media (prefers-reduced-motion: reduce) { .ember { display: none; } #status-bar.busy #status-shimmer { animation: none; } }
+</style>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+
+	</head>
+	<body>
+		<canvas id="canvas">
+			Your browser does not support the canvas tag.
+		</canvas>
+
+		<noscript>
+			Your browser does not support JavaScript.
+		</noscript>
+
+		<div id="status">
+			<div id="embers" aria-hidden="true"></div>
+			<h1 id="status-title">HAMMER &amp; HOARD</h1>
+			<div id="status-bar"><div id="status-fill"></div><div id="status-shimmer"></div></div>
+			<div id="status-text" role="status">Fetching the ore&hellip;</div>
+			<div id="status-hint"></div>
+			<div id="status-notice"></div>
+			<div id="status-version">v0.3.214</div>
+		</div>
+
+		<script src="index.js"></script>
+		<script>
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":89901984,"index.wasm":39509339},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4};
+const GODOT_THREADS_ENABLED = false;
+const engine = new Engine(GODOT_CONFIG);
+
+// Crash log: keeps the game's last console lines, and if the browser takes the graphics
+// away (WebGL context lost, e.g. Safari on an iPad), shows them on screen and saves them,
+// so the next visit shows them too. Players can screenshot either for us.
+(function () {
+	const version = document.getElementById('status-version').textContent;
+	const lines = [];
+	const keep = (kind, args) => {
+		const text = Array.from(args).map((a) => (a instanceof Error ? a.message : String(a))).join(' ');
+		// Skip the numbered source lines Godot dumps when a shader fails to build.
+		if (/^\d+:/.test(text)) {
+			return;
+		}
+		lines.push(kind + ': ' + text.slice(0, 240));
+		if (lines.length > 40) {
+			lines.shift();
+		}
+	};
+	for (const kind of ['log', 'warn', 'error']) {
+		const original = console[kind].bind(console);
+		console[kind] = function () {
+			keep(kind, arguments);
+			original.apply(null, arguments);
+		};
+	}
+	window.addEventListener('error', (e) => keep('pageerror', [e.message]));
+	const show = (text) => {
+		const box = document.createElement('pre');
+		box.className = 'crash-log';
+		box.textContent = text + '\n\n(Tap here to close.)';
+		box.addEventListener('click', () => box.remove());
+		document.body.appendChild(box);
+	};
+	let saved = null;
+	try {
+		saved = localStorage.getItem('hnh-crash-log');
+		localStorage.removeItem('hnh-crash-log');
+	} catch (e) {
+		saved = null;
+	}
+	if (saved) {
+		show('LAST CRASH (from your previous visit). Please screenshot this and send it to us.\n\n' + saved);
+	}
+	document.getElementById('canvas').addEventListener('webglcontextlost', function () {
+		const text = 'The browser took the graphics away (WebGL context lost).\n'
+			+ 'Build ' + version + ', ' + new Date().toLocaleString() + '\n'
+			+ navigator.userAgent + '\n' + window.innerWidth + 'x' + window.innerHeight
+			+ ' @' + window.devicePixelRatio + 'x\n\n' + lines.join('\n');
+		try {
+			localStorage.setItem('hnh-crash-log', text);
+		} catch (e) {
+			// Private browsing can refuse storage; the screen copy still shows.
+		}
+		show('Please screenshot this and send it to us.\n\n' + text);
+	});
+}());
+
+(function () {
+	const statusOverlay = document.getElementById('status');
+	const statusBar = document.getElementById('status-bar');
+	const statusFill = document.getElementById('status-fill');
+	const statusText = document.getElementById('status-text');
+	const statusHint = document.getElementById('status-hint');
+	const statusNotice = document.getElementById('status-notice');
+	let failed = false;
+
+	const embers = document.getElementById('embers');
+	for (let i = 0; i < 28; i++) {
+		const e = document.createElement('div');
+		e.className = 'ember';
+		e.style.left = (Math.random() * 100) + '%';
+		e.style.setProperty('--drift', ((Math.random() - 0.5) * 120) + 'px');
+		e.style.animationDuration = (4 + Math.random() * 4) + 's';
+		e.style.animationDelay = (-Math.random() * 8) + 's';
+		embers.appendChild(e);
+	}
+
+	function setText(text) {
+		statusText.textContent = text;
+	}
+
+	// The game reports its own warm-up steps through these (see GameController).
+	window.hoardStatus = function (text) {
+		if (!failed) {
+			setText(text);
+		}
+	};
+	window.hoardLoaded = function () {
+		if (failed || !statusOverlay.isConnected) {
+			return;
+		}
+		statusOverlay.classList.add('gone');
+		setTimeout(() => statusOverlay.remove(), 700);
+	};
+
+	function setStatusNotice(text) {
+		while (statusNotice.lastChild) {
+			statusNotice.removeChild(statusNotice.lastChild);
+		}
+		text.split('\n').forEach((line) => {
+			statusNotice.appendChild(document.createTextNode(line));
+			statusNotice.appendChild(document.createElement('br'));
+		});
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		if (err instanceof Error) {
+			setStatusNotice(err.message);
+		} else if (typeof err === 'string') {
+			setStatusNotice(err);
+		} else {
+			setStatusNotice('An unknown error occurred.');
+		}
+		failed = true;
+		statusBar.style.display = 'none';
+		statusText.style.display = 'none';
+		statusHint.style.display = 'none';
+		statusNotice.style.display = 'block';
+	}
+
+	const missing = Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+
+	if (missing.length !== 0) {
+		const missingMsg = 'Error\nThe following features required to run Godot projects on the Web are missing:\n';
+		displayFailureNotice(missingMsg + missing.join('\n'));
+	} else {
+		const mb = (bytes) => (bytes / 1048576).toFixed(0);
+		engine.startGame({
+			'onProgress': function (current, total) {
+				if (current > 0 && total > 0) {
+					statusFill.style.transform = 'scaleX(' + (current / total) + ')';
+					setText('Fetching the ore… ' + mb(current) + ' of ' + mb(total) + ' MB');
+				}
+			},
+		}).then(() => {
+			// Downloaded; the game now builds its cave. It hides this screen itself.
+			statusBar.classList.add('busy');
+			if (statusText.textContent.startsWith('Fetching')) {
+				setText('Stoking the forge…');
+			}
+			statusHint.textContent = 'The first start takes a while. It can look stuck, but it is working.';
+		}, displayFailureNotice);
+	}
+}());
+		</script>
+	</body>
+</html>
+
